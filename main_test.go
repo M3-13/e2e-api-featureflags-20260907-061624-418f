@@ -8,7 +8,7 @@ import (
 )
 
 func TestHealthz(t *testing.T) {
-	mux := newMux(NewFlagStore())
+	mux := newMux(NewFlagStore(), "", 0)
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
@@ -22,13 +22,27 @@ func TestHealthz(t *testing.T) {
 }
 
 func TestHealthzNoCORSHeader(t *testing.T) {
-	mux := newMux(NewFlagStore())
+	mux := newMux(NewFlagStore(), "", 0)
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
 	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "" {
 		t.Fatalf("unexpected CORS header: %q", got)
+	}
+}
+
+func TestJSONResponseCacheControl(t *testing.T) {
+	mux := newMux(NewFlagStore(), "", 0)
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if got := rec.Header().Get("Cache-Control"); got != "no-store" {
+		t.Fatalf("expected Cache-Control no-store, got %q", got)
+	}
+	if got := rec.Header().Get("Pragma"); got != "no-cache" {
+		t.Fatalf("expected Pragma no-cache, got %q", got)
 	}
 }
 
