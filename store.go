@@ -20,6 +20,10 @@ type FlagStore struct {
 
 var ErrFlagConflict = errors.New("flag already exists")
 
+var ErrFlagLimit = errors.New("flag limit reached")
+
+const maxFlags = 10000
+
 func NewFlagStore() *FlagStore {
 	return &FlagStore{flags: make(map[string]Flag)}
 }
@@ -27,6 +31,9 @@ func NewFlagStore() *FlagStore {
 func (s *FlagStore) Create(f Flag) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if len(s.flags) >= maxFlags {
+		return ErrFlagLimit
+	}
 	if _, ok := s.flags[f.Key]; ok {
 		return ErrFlagConflict
 	}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"regexp"
+	"unicode/utf8"
 )
 
 const maxBodyBytes = 1 << 20
@@ -45,6 +46,10 @@ func validateFlagRequest(w http.ResponseWriter, req *flagRequest) bool {
 		writeError(w, http.StatusBadRequest, "rollout_percent must be between 0 and 100")
 		return false
 	}
+	if utf8.RuneCountInString(req.Description) > 256 {
+		writeError(w, http.StatusBadRequest, "description too long")
+		return false
+	}
 	return true
 }
 
@@ -76,6 +81,10 @@ func handleCreateFlag(s *FlagStore) http.HandlerFunc {
 		if err := s.Create(flag); err != nil {
 			if errors.Is(err, ErrFlagConflict) {
 				writeError(w, http.StatusConflict, "flag already exists")
+				return
+			}
+			if errors.Is(err, ErrFlagLimit) {
+				writeJSON(w, http.StatusInsufficientStorage, map[string]string{"error": "insufficient storage"})
 				return
 			}
 			writeError(w, http.StatusInternalServerError, err.Error())
