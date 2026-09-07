@@ -12,6 +12,10 @@ func handleEvaluate(s *FlagStore) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, "user is required")
 			return
 		}
+		if len(user) > 256 {
+			writeError(w, http.StatusBadRequest, "user too long")
+			return
+		}
 
 		key := r.PathValue("key")
 		flag, ok := s.Get(key)

@@ -96,6 +96,32 @@ func TestEvaluateMissingUser(t *testing.T) {
 	}
 }
 
+func TestEvaluateUserTooLong(t *testing.T) {
+	s := NewFlagStore()
+	seedFlag(t, s, "feature", 50)
+	mux := newMux(s)
+
+	longUser := make([]byte, 257)
+	for i := range longUser {
+		longUser[i] = 'a'
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/flags/feature/evaluate?user="+string(longUser), nil)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rr.Code)
+	}
+
+	var body map[string]string
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if body["error"] != "user too long" {
+		t.Fatalf("error = %q, want %q", body["error"], "user too long")
+	}
+}
+
 func TestEvaluateUnknownKey(t *testing.T) {
 	mux := newTestMux()
 
