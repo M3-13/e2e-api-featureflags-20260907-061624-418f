@@ -31,6 +31,18 @@ func TestCreateConflict(t *testing.T) {
 	}
 }
 
+func TestCreateFlagLimit(t *testing.T) {
+	s := NewFlagStore()
+	for i := 0; i < maxFlags; i++ {
+		if err := s.Create(Flag{Key: fmt.Sprintf("key-%d", i)}); err != nil {
+			t.Fatalf("create %d: unexpected error: %v", i, err)
+		}
+	}
+	if err := s.Create(Flag{Key: "overflow"}); err != ErrFlagLimit {
+		t.Fatalf("expected ErrFlagLimit, got %v", err)
+	}
+}
+
 func TestListSorted(t *testing.T) {
 	s := NewFlagStore()
 	for _, k := range []string{"b", "a", "c"} {

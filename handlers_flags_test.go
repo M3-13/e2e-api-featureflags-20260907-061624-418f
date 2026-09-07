@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -131,6 +132,54 @@ func TestCreateFlagBodyTooLarge(t *testing.T) {
 	}
 	if decodeError(t, rec) == "" {
 		t.Fatalf("expected JSON error object")
+	}
+}
+
+func TestCreateFlagDescriptionTooLong(t *testing.T) {
+	store := NewFlagStore()
+	body := `{"key":"k","enabled":true,"description":"` + strings.Repeat("a", 257) + `"}`
+	rec := serve(t, handleCreateFlag(store), http.MethodPost, "/flags", body, "")
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rec.Code)
+	}
+	if got := decodeError(t, rec); got != "description too long" {
+		t.Fatalf("expected 'description too long', got %q", got)
+	}
+}
+
+func TestUpdateFlagDescriptionTooLong(t *testing.T) {
+	store := NewFlagStore()
+	store.Create(Flag{Key: "k", Enabled: false})
+	body := `{"enabled":true,"description":"` + strings.Repeat("a", 257) + `"}`
+	rec := serve(t, handleUpdateFlag(store), http.MethodPut, "/flags/k", body, "k")
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rec.Code)
+	}
+	if got := decodeError(t, rec); got != "description too long" {
+		t.Fatalf("expected 'description too long', got %q", got)
+	}
+}
+
+func TestCreateFlagDescriptionMaxLengthOK(t *testing.T) {
+	store := NewFlagStore()
+	body := `{"key":"k","enabled":true,"description":"` + strings.Repeat("a", 256) + `"}`
+	rec := serve(t, handleCreateFlag(store), http.MethodPost, "/flags", body, "")
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", rec.Code)
+	}
+}
+
+func TestCreateFlagLimitHandler(t *testing.T) {
+	store := NewFlagStore()
+	for i := 0; i < maxFlags; i++ {
+		store.Create(Flag{Key: fmt.Sprintf("key-%d", i)})
+	}
+	rec := serve(t, handleCreateFlag(store), http.MethodPost, "/flags", `{"key":"overflow","enabled":true}`, "")
+	if rec.Code != http.StatusInsufficientStorage {
+		t.Fatalf("expected 507, got %d", rec.Code)
+	}
+	if got := decodeError(t, rec); got != "insufficient storage" {
+		t.Fatalf("expected 'insufficient storage', got %q", got)
 	}
 }
 
