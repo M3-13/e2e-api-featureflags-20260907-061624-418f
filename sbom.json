@@ -1,0 +1,51 @@
+{
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "spdxVersion": "SPDX-2.3",
+  "name": "featureflags",
+  "dataLicense": "CC0-1.0",
+  "documentNamespace": "https://featureflags.invalid/sbom",
+  "creationInfo": {
+    "created": "2026-09-07T00:00:00Z",
+    "creators": ["Tool: featureflags"],
+    "comment": "Module featureflags, Go 1.22. Components: standard library only. No external dependencies."
+  },
+  "packages": [
+    {
+      "SPDXID": "SPDXRef-Package-featureflags",
+      "name": "featureflags",
+      "versionInfo": "1.22",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "primaryPackagePurpose": "APPLICATION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:golang/featureflags@1.22"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Package-golang-stdlib",
+      "name": "go standard library",
+      "versionInfo": "1.22",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "primaryPackagePurpose": "LIBRARY",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:golang/std@1.22"
+        }
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "spdxElementId": "SPDXRef-Package-featureflags",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-golang-stdlib"
+    }
+  ]
+}
