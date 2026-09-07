@@ -99,7 +99,7 @@ func TestEvaluateMissingUser(t *testing.T) {
 func TestEvaluateUserTooLong(t *testing.T) {
 	s := NewFlagStore()
 	seedFlag(t, s, "feature", 50)
-	mux := newMux(s)
+	mux := newMux(s, "", 0)
 
 	longUser := make([]byte, 257)
 	for i := range longUser {
