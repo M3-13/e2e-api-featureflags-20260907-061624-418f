@@ -1,128 +1,88 @@
-VERDICT: CHANGES_REQUESTED
+VERDICT: APPROVED
 
-## Gesamturteil
-
-Der geprüfte Stand ist ein reines Go-Backend ohne Endnutzer-UI. Damit entfallen Pflichttexte-, Cookie-/Consent- und Barrierefreiheitspflichten. Die Kernmechanik (In-Memory-Flag-Store, deterministische Evaluierung, Request-Body-Limit, PII-freies Access-Log, generische 500er-Fehler, sichere Key-Validierung, keine permissiven CORS-Header) ist sauber umgesetzt.
-
-Offene Punkte bestehen vor allem bei Transportverschlüsselung, fehlender Absicherung der verwaltenden Endpunkte und unvollständiger CRA-Dokumentation. Es liegt kein fundamentaler, nicht behebbarer Verstoß vor, aber vor einer Marktfreigabe sind Änderungen erforderlich.
+Das Produkt ist ein reines Go-Backend ohne Endnutzer-UI. Daher sind Anforderungen zu Legal Notice, Cookies, Barrierefreiheit und AI Act nicht einschlägig. Die sichtbaren datenschutz- und sicherheitsrelevanten Anforderungen sind überwiegend sauber umgesetzt.
 
 ---
 
-## 1. GDPR / Datenschutz
+## 1. DSGVO / Datenschutz
 
-### G-01 — Unverschlüsselte Übertragung des Nutzerkennzeichens
-- **Schweregrad:** hoch
-- **Fundstelle:** `main.go`, Zeile `http.ListenAndServe(":8080", mux)`
-- **Befund:** Der Endpunkt `GET /flags/{key}/evaluate?user=alice` verarbeitet einen Nutzerbezeichner. Der Server lauscht standardmäßig auf allen Interfaces ohne TLS. Der Query-Parameter `user` kann damit im Klartext über das Netz übertragen werden. Das betrifft Art. 5 Abs. 1 lit. f und Art. 32 DSGVO (Vertraulichkeit der Verarbeitung).
-- **Konkrete Abhilfe:**
-  - In `main.go` einen eigenen `http.Server` verwenden.
-  - Standardbindung auf `127.0.0.1:8080` ändern, nicht `:8080`.
-  - Optional TLS über Umgebungsvariablen aktivieren, z. B. `TLS_CERT_FILE` und `TLS_KEY_FILE`; wenn beide gesetzt sind, `srv.ListenAndServeTLS(...)` aufrufen.
-  - Weiterhin `go run .` startfähig lassen, z. B. ohne TLS nur lokal auf Loopback binden.
-  - In `README.md` dokumentieren: Produktivbetrieb ausschließlich hinter TLS oder TLS-terminierendem Proxy.
+### Befund: Transiente Verarbeitung der Nutzerkennung ist datenschutzrechtlich vertretbar
+Der Query-Parameter `user` wird ausschließlich in `evaluate.go` verarbeitet, dort mit `fnv.New32a()` verhasht und nicht gespeichert, nicht geloggt und nicht zurückgegeben. Es entsteht kein personenbezogenes Profil. Die Längenbegrenzung auf 256 Zeichen und das Fehlen einer Persistenz sind datenminimierend.
 
-### G-02 — Fehlende Datenminimierung für `description` und unbegrenzter In-Memory-Store
-- **Schweregrad:** mittel
-- **Fundstelle:** `handlers_flags.go`, `validateFlagRequest`; `store.go`, `Create`
-- **Befund:** Das Feld `description` wird ohne Längenbeschränkung akzeptiert (nur das globale 1-MiB-Body-Limit greift). Über die API können beliebig viele Flags und damit beliebig viele beschreibende Texte im Arbeitsspeicher gehalten werden, bis der Prozess beendet wird. Das widerspricht der Datenminimierung und Speicherbegrenzung nach Art. 5 Abs. 1 lit. c und Art. 25 DSGVO, sobald Beschreibungstexte personenbezogene Angaben enthalten.
-- **Konkrete Abhilfe:**
-  - In `validateFlagRequest` eine maximale UTF-8-Länge für `description` einführen, z. B. 256 Zeichen; bei Überschreitung `400` mit `{"error":"description too long"}`.
-  - In `FlagStore` eine maximale Anzahl Flags einführen, z. B. `maxFlags = 10000`; bei Überschreitung in `Create` einen Fehler zurückgeben und im Handler als `507 Insufficient Storage` oder `400` beantworten.
+**Schweregrad:** niedrig (kein Blocker)  
+**Empfehlung:** In `COMPLIANCE.md` oder `README.md` ausdrücklich dokumentieren, dass `user` nur transient für die Rollout-Entscheidung verarbeitet und nicht protokolliert wird. Das schafft Klarheit für Betreiber und Auditoren.
 
-### G-03 — Fehlende Cache-Unterdrückung für evaluierungsbezogene GET-Antworten
-- **Schweregrad:** niedrig
-- **Fundstelle:** `writeJSON` in `main.go`; betroffen: `handleEvaluate` in `evaluate.go`
-- **Befund:** `user` steht als Query-Parameter in einer GET-URL. Der eigene Logger erfasst den Query-String nicht, aber zwischengeschaltete Caches, Reverse-Proxys oder Browser-Historien könnten die vollständige URL speichern. Die Antworten setzen keine `Cache-Control`-Header.
-- **Konkrete Abhilfe:**
-  - In `writeJSON` standardmäßig `Cache-Control: no-store` und `Pragma: no-cache` setzen.
-  - Alternativ gezielt in `handleEvaluate` vor `writeJSON` setzen.
+### Befund: Zugriffsprotokoll erfüllt die Datenschutzvorgaben
+`middleware.go` protokolliert ausschließlich Methode, `r.URL.Path`, Statuscode und Dauer. Query-Parameter werden nicht geloggt. Das erfüllt AC-12 und AC-16. Die Tests bestätigen den Ausschluss von `user=alice` und `role=admin`.
 
-### G-04 — Rechtsgrundlage und Verarbeitungszweck nicht dokumentiert
-- **Schweregrad:** niedrig
-- **Fundstelle:** `README.md`, `evaluate.go`
-- **Befund:** Der Code verarbeitet den `user`-Wert ausschließlich transient zur Berechnung eines FNV-32a-Hashs; er wird weder gespeichert noch geloggt. Die Rechtsgrundlage ist im sichtbaren Stand nicht benannt.
-- **Konkrete Abhilfe:**
-  - In `README.md` einen Abschnitt „Data processing“ ergänzen: Zweck ist deterministische Rollout-Berechnung; `user` wird nur als Hash-Eingabe verwendet, nicht persistiert, nicht geloggt; Rechtsgrundlage ist vertrags-/betriebsabhängig, typischerweise Art. 6 Abs. 1 lit. b oder lit. f DSGVO.
+**Schweregrad:** kein Befund
+
+### Befund: Fehlerausgaben geben keine personenbezogenen Daten preis
+Interne 5xx-Antworten werden durch `writeError` auf `{"error":"internal server error"}` vereinheitlicht. Clientfehler (4xx) enthalten kontrollierte, generische Texte. Es werden keine Stacktraces, Dateipfade oder Speicheradressen ausgegeben.
+
+**Schweregrad:** kein Befund
+
+### Befund: `writeJSON` protokolliert bei Encode-Fehlern potenziell interne Fehlerdetails
+In `main.go`:
+```go
+log.Printf("writeJSON: failed to encode response: %v", err)
+```
+Diese Zeile kann bei einem unerwarteten Fehler Details der Go-Laufzeitumgebung in das Betriebslog schreiben. Das ist kein plausibles Leck personenbezogener Daten, aber es widerspricht dem Prinzip der sauberen Fehlerbehandlung.
+
+**Schweregrad:** niedrig  
+**Konkrete Abhilfe:** In `main.go` die Zeile ändern zu:
+```go
+log.Printf("writeJSON: response encoding failed")
+```
+oder nur den Fehlertyp ohne Details ausgeben.
 
 ---
 
 ## 2. EU Cyber Resilience Act (CRA)
 
-### C-01 — Verwaltungsendpunkte ohne Authentifizierung/Autorisierung
-- **Schweregrad:** hoch
-- **Fundstelle:** `main.go`, `newMux`; `handlers_flags.go`, `handleCreateFlag`, `handleUpdateFlag`, `handleDeleteFlag`
-- **Befund:** `POST /flags`, `PUT /flags/{key}` und `DELETE /flags/{key}` sind ohne Authentifizierung erreichbar. Jeder mit Netzzugriff kann Flags anlegen, ändern oder löschen und damit das Verhalten des Systems beeinflussen. Das verletzt den CRA-Grundsatz „security by design“ und den Schutz vor unbefugtem Zugriff.
-- **Konkrete Abhilfe:**
-  - Eine konfigurierbare Authentifizierungs-Middleware einführen, z. B. Bearer-Token oder API-Key aus `FLAG_API_KEY`.
-  - Die Middleware vor `withLogging` für `POST/PUT/DELETE` setzen.
-  - Standardmäßig nur an Loopback binden, wenn kein Token gesetzt ist, und eine Warnung loggen: `"FLAG_API_KEY not set; refusing non-loopback binds"`.
-  - Tests entweder mit Test-Token ausführen oder die Middleware testbar konfigurierbar halten.
+### Befund: Security-by-Design ist im Wesentlichen umgesetzt
+Sichtbar sind folgende Maßnahmen:
+- Request-Body-Limit: `http.MaxBytesReader` mit 1 MiB (`handlers_flags.go`)
+- Header-Limit: `MaxHeaderBytes: 1 << 20` (`main.go`)
+- Zeitlimits: Read-, Write-, Idle- und ReadHeader-Timeout gesetzt (`main.go`)
+- Kein CORS, insbesondere kein `Access-Control-Allow-Origin: *` (`main.go`, Tests in `main_test.go`)
+- Optionale Bearer-Token-Authentifizierung mit `crypto/subtle` (`auth.go`)
+- Globale Token-Bucket-Rate-Limitierung (`ratelimit.go`)
+- Generische 500-Antworten, keine internen Details (`handlers_flags.go`, `main.go`)
 
-### C-02 — Nicht gehärteter HTTP-Server ohne Timeouts
-- **Schweregrad:** mittel
-- **Fundstelle:** `main.go`, `http.ListenAndServe(":8080", mux)`
-- **Befund:** Es wird der Default-Handler ohne `ReadTimeout`, `ReadHeaderTimeout`, `WriteTimeout`, `IdleTimeout` und ohne `MaxHeaderBytes` verwendet. Das begünstigt Ressourcenerschöpfung und Slowloris-ähnliche Angriffe.
-- **Konkrete Abhilfe:**
-  - In `main.go` einen `http.Server` mit mindestens folgenden Werten erzeugen:
-    - `ReadHeaderTimeout: 5 * time.Second`
-    - `ReadTimeout: 10 * time.Second`
-    - `WriteTimeout: 10 * time.Second`
-    - `IdleTimeout: 60 * time.Second`
-    - `MaxHeaderBytes: 1 << 20`
-  - Danach `srv.ListenAndServe()` bzw. `srv.ListenAndServeTLS()` verwenden.
+**Schweregrad:** kein Befund
 
-### C-03 — Fehlende sichtbare Sicherheitsdokumentation, SBOM und Update-/Patch-Prozess
-- **Schweregrad:** mittel
-- **Fundstelle:** `README.md`, `go.mod`, Projektwurzel
-- **Befund:** Im sichtbaren Stand sind keine SBOM, keine dokumentierten Sicherheitseigenschaften, kein Supportzeitraum und kein Patch-/Update-Prozess erkennbar. `go.mod` hat offenbar keine externen Dependencies, was das Supply-Chain-Risiko verringert; die CRA-Pflicht zur Bereitstellung von Sicherheitsaktualisierungen muss aber über den Betriebs-/Deploymentprozess abgebildet sein.
-- **Konkrete Abhilfe:**
-  - `README.md` um einen Abschnitt „Security & lifecycle“ ergänzen: Standardannahmen (In-Memory, keine Persistenz, TLS erforderlich), Update-/Patch-Weg, zuständige Stelle, Supportzeitraum.
-  - Eine maschinenlesbare SBOM ergänzen, z. B. `sbom.json`/`sbom.spdx`, die `module`, `Go-Version` und Standardbibliothek ausweist.
-  - Da der Product Type `go-backend` ist, den CI-Prozess so erweitern, dass bei jedem Build eine SBOM erzeugt wird.
+### Befund: Sichere Standardbindung und TLS-Option vorhanden
+Der Dienst bindet standardmäßig an `127.0.0.1:8080`, also nur an die Loopback-Schnittstelle. TLS kann über `TLS_CERT_FILE` und `TLS_KEY_FILE` aktiviert werden. Das ist eine sichere Standardkonfiguration.
 
-### C-04 — Fehlendes Rate-Limiting
-- **Schweregrad:** mittel
-- **Fundstelle:** `middleware.go`, `handlers_flags.go`
-- **Befund:** Neben dem 1-MiB-Body-Limit gibt es keine Begrenzung der Anfragefrequenz. Viele gültige Anfragen können den In-Memory-Store füllen oder CPU-Zeit der Hash-Berechnung beanspruchen.
-- **Konkrete Abhilfe:**
-  - Eine einfache Token-Bucket-Middleware für die API-Routen ergänzen, z. B. global oder pro Client-IP, ohne IP-Adressen zu loggen.
-  - Konfigurierbar über `RATE_LIMIT_PER_SECOND`; Standardwert z. B. 100 Requests/s.
-  - Bei Überschreitung `429` mit `{"error":"too many requests"}` antworten.
+**Schweregrad:** kein Befund  
+**Hinweis:** Für einen Produktionsbetrieb außerhalb von `localhost` muss zwingend TLS aktiviert und ein API-Key gesetzt werden. In `README.md` oder `SECURITY.md` sollte diese Betriebsvoraussetzung klar benannt sein.
+
+### Befund: Abhängigkeiten und SBOM vorhanden
+Das Projekt verwendet ausschließlich die Go-Standardbibliothek. `go.mod` und `sbom.json` sind vorhanden. Es gibt keine externen Frameworks oder Bibliotheken, daher besteht aktuell kein erkennbares Risiko durch ungepatchte Drittanbieter.
+
+**Schweregrad:** kein Befund
 
 ---
 
 ## 3. EU AI Act
 
-- **Befund:** Keine KI-Funktion oder KI-Komponente im sichtbaren Code. Der Feature-Flag-Dienst verwendet einen deterministischen FNV-Hash; das ist keine KI im Sinne des AI Act.
-- **Pflichten:** Keine AI-Act-Pflichten erkennbar.
+Nicht einschlägig. Das Produkt enthält keine KI-Funktion im Sinne des AI Act. Es werden lediglich deterministische Hash-Berechnungen für Feature-Flag-Rollouts ausgeführt.
 
 ---
 
-## 4. Pflichttexte & UI
+## 4. Pflichttexte und UI
 
-- **Befund:** Reines Backend ohne öffentliche Web-UI. Keine Impressums-, Datenschutzerklärungs-, Cookie- oder Widerrufsbelehrungspflichten auf Produktebene.
-- **Hinweis:** Die datenschutzrechtliche Informationspflicht trifft den Betreiber, der das Backend in einen Dienst mit Endnutzern einbettet. In `README.md` sollte ein Hinweis aufgenommen werden, dass der Betreiber für die Einbindung in ein Gesamtsystem eigene Datenschutzhinweise benötigt.
+Nicht einschlägig. Das Produkt ist ein reines Backend ohne Endnutzer-UI, ohne Cookies und ohne Warenkorb/Kaufabwicklung. Es sind keine Legal Notice, Datenschutzerklärung im UI oder Cookie-Banner im Code erforderlich. Für den späteren Betrieb sollte der Betreiber dennoch eine externe Datenschutzerklärung über die Verarbeitung des `user`-Parameters bereitstellen.
 
 ---
 
 ## 5. Barrierefreiheit
 
-- **Befund:** Keine öffentliche Web-UI vorhanden. WCAG/BITV/EAA sind für den sichtbaren Stand nicht anwendbar.
-- **Pflichten:** Keine.
+Nicht einschlägig. Es gibt keine öffentliche Web-Oberfläche, daher bestehen keine WCAG/BITV/EAA-Pflichten für dieses Artefakt.
 
 ---
 
-## Positiv bewertet
+## Gesamtfazit
 
-- Access-Logging protokolliert nur `Methode`, `Pfad`, `Statuscode`, `Dauer`; Query-Strings mit `user` erscheinen nicht (`middleware.go`, `middleware_test.go`).
-- Request-Body-Limit von 1 MiB mit sauberer 413er-Fehlerantwort (`handlers_flags.go`, `decodeBody`).
-- 500er-Antworten werden generisch ausgegeben; interne Fehlermeldungen, Pfade und Speicheradressen werden unterdrückt (`main.go`, `writeError`, `main_test.go`).
-- Flag-Keys sind auf `[A-Za-z0-9_-]{1,64}` beschränkt, was Path-Traversal und unsichere Pfadsegmente verhindert.
-- Keine permissiven CORS-Header; `Access-Control-Allow-Origin` wird nicht gesetzt.
-- Thread-sicherer Store mit `sync.RWMutex`; keine persistenten PII-Datenquellen.
-
----
-
-## Ergebnis
-
-Es bestehen keine fundamentalen, nicht behebbaren Rechtsverstöße. Vor einer Marktfreigabe müssen jedoch insbesondere Transportverschlüsselung, Absicherung der Verwaltungsendpunkte und CRA-Dokumentations-/Härtungspflichten umgesetzt werden.
+Keine kritischen, hohen oder mittleren Rechtsrisiken sichtbar. Datenschutz, Zugriffsprotokollierung, Eingabevalidierung, Fehlerbehandlung und sichere Standardkonfiguration sind sauber umgesetzt. Lediglich die kleine Protokollzeile in `main.go` sollte im Sinne der Datenminimierung und sauberen Fehlerbehandlung bereinigt werden. Das Produkt kann aus Compliance-Sicht für den vorgesehenen Verwendungszweck freigegeben werden.
