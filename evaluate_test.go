@@ -9,7 +9,7 @@ import (
 )
 
 func newTestMux() *http.ServeMux {
-	return newMux(NewFlagStore())
+	return newMux(NewFlagStore(), "", 0)
 }
 
 func seedFlag(t *testing.T, s *FlagStore, key string, rolloutPercent int) {
@@ -22,7 +22,7 @@ func seedFlag(t *testing.T, s *FlagStore, key string, rolloutPercent int) {
 func TestEvaluateDeterministic(t *testing.T) {
 	s := NewFlagStore()
 	seedFlag(t, s, "feature", 50)
-	mux := newMux(s)
+	mux := newMux(s, "", 0)
 
 	var results []bool
 	for i := 0; i < 10; i++ {
@@ -50,7 +50,7 @@ func TestEvaluateDistributionApproximatesRolloutPercent(t *testing.T) {
 	const numUsers = 1000
 	s := NewFlagStore()
 	seedFlag(t, s, "feature", rolloutPercent)
-	mux := newMux(s)
+	mux := newMux(s, "", 0)
 
 	enabledCount := 0
 	for i := 0; i < numUsers; i++ {
@@ -79,7 +79,7 @@ func TestEvaluateDistributionApproximatesRolloutPercent(t *testing.T) {
 func TestEvaluateMissingUser(t *testing.T) {
 	s := NewFlagStore()
 	seedFlag(t, s, "feature", 50)
-	mux := newMux(s)
+	mux := newMux(s, "", 0)
 
 	req := httptest.NewRequest(http.MethodGet, "/flags/feature/evaluate", nil)
 	rr := httptest.NewRecorder()
@@ -99,7 +99,7 @@ func TestEvaluateMissingUser(t *testing.T) {
 func TestEvaluateUserTooLong(t *testing.T) {
 	s := NewFlagStore()
 	seedFlag(t, s, "feature", 50)
-	mux := newMux(s)
+	mux := newMux(s, "", 0)
 
 	longUser := make([]byte, 257)
 	for i := range longUser {

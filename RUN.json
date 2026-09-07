@@ -8,7 +8,13 @@
       "kind": "server",
       "start": ["go", "run", "."],
       "port": 8080,
-      "health": { "path": "/healthz", "expect_status": [200] }
+      "health": { "path": "/healthz", "expect_status": [200] },
+      "env": {
+        "FLAG_API_KEY": { "external": true, "degraded_without": "authenticated /flags routes answer 401 without a Bearer token; the service still boots and serves /healthz" },
+        "RATE_LIMIT_PER_SECOND": { "dev": "100" },
+        "TLS_CERT_FILE": { "external": true, "degraded_without": "the service serves plain HTTP instead of TLS" },
+        "TLS_KEY_FILE": { "external": true, "degraded_without": "the service serves plain HTTP instead of TLS" }
+      }
     }
   ]
 }

@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 )
@@ -12,7 +13,7 @@ import (
 func TestWithLoggingCapturesMethodPathAndStatus(t *testing.T) {
 	var buf bytes.Buffer
 	log.SetOutput(&buf)
-	defer log.SetOutput(nil)
+	defer log.SetOutput(os.Stderr)
 
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusCreated)
@@ -41,7 +42,7 @@ func TestWithLoggingCapturesMethodPathAndStatus(t *testing.T) {
 func TestWithLoggingExcludesQueryParameters(t *testing.T) {
 	var buf bytes.Buffer
 	log.SetOutput(&buf)
-	defer log.SetOutput(nil)
+	defer log.SetOutput(os.Stderr)
 
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -70,7 +71,7 @@ func TestWithLoggingExcludesQueryParameters(t *testing.T) {
 func TestWithLoggingDefaultStatus(t *testing.T) {
 	var buf bytes.Buffer
 	log.SetOutput(&buf)
-	defer log.SetOutput(nil)
+	defer log.SetOutput(os.Stderr)
 
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("ok"))
